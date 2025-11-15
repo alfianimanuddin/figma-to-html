@@ -21,18 +21,20 @@ export default async function handler(req, res) {
     }
 
     // Parse Figma URL to extract file key and node ID
-    const urlMatch = figmaUrl.match(/\/file\/([^/]+)/);
+    // Support both /file/ and /design/ URL formats
+    const urlMatch = figmaUrl.match(/\/(file|design)\/([^/]+)/);
     if (!urlMatch) {
-      return res.status(400).json({ error: 'Invalid Figma URL format' });
+      return res.status(400).json({ error: 'Invalid Figma URL format. Expected format: https://www.figma.com/file/... or https://www.figma.com/design/...' });
     }
 
-    const fileKey = urlMatch[1];
+    const fileKey = urlMatch[2];
 
-    // Extract node ID from URL if present (e.g., ?node-id=123:456)
+    // Extract node ID from URL if present (e.g., ?node-id=123-456 or ?node-id=123:456)
     let nodeId = null;
     const nodeMatch = figmaUrl.match(/node-id=([^&]+)/);
     if (nodeMatch) {
-      nodeId = nodeMatch[1];
+      // Convert hyphen format to colon format for API (3775-48500 -> 3775:48500)
+      nodeId = nodeMatch[1].replace('-', ':');
     }
 
     // Step 1: Get file data
