@@ -1,4 +1,6 @@
 {
+  "buildCommand": "echo 'No build required'",
+  "outputDirectory": ".",
   "functions": {
     "api/proxy.js": {
       "maxDuration": 60
