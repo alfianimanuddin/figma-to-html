@@ -83,8 +83,8 @@ ${additionalInstructions ? `9. Additional requirements: ${additionalInstructions
 
 Please provide ONLY the HTML code, no explanations. Make sure it's a complete, ready-to-use HTML file.`;
 
-      // TODO: Replace this URL with your actual Vercel deployment URL after deploying
-      const PROXY_URL = 'https://your-vercel-app.vercel.app/api/proxy';
+      // Vercel proxy URL for Claude API
+      const PROXY_URL = 'https://figma-to-html-ashen.vercel.app/api/proxy';
 
       const response = await fetch(PROXY_URL, {
         method: 'POST',
