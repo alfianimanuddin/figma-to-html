@@ -202,8 +202,16 @@ figma.ui.onmessage = async (msg) => {
         const figmaData = await figmaResponse.json();
         base64Image = figmaData.base64Image || '';
 
-        // Extract node data from REST API response
-        if (figmaData.nodeData && figmaData.nodeId) {
+        // Use structured design tokens instead of raw data
+        if (figmaData.designTokens) {
+          nodeData = {
+            name: figmaData.designTokens.structure[0]?.name || 'Design',
+            width: figmaData.designTokens.layout.width,
+            height: figmaData.designTokens.layout.height,
+            type: figmaData.designTokens.structure[0]?.type || 'FRAME',
+            designData: figmaData.designTokens // Structured tokens
+          };
+        } else if (figmaData.nodeData && figmaData.nodeId) {
           const node = figmaData.nodeData.nodes[figmaData.nodeId];
           if (node && node.document) {
             nodeData = {
@@ -211,7 +219,7 @@ figma.ui.onmessage = async (msg) => {
               width: node.document.absoluteBoundingBox?.width || 0,
               height: node.document.absoluteBoundingBox?.height || 0,
               type: node.document.type,
-              designData: node.document // Full REST API data
+              designData: node.document
             };
           }
         }
@@ -268,39 +276,57 @@ figma.ui.onmessage = async (msg) => {
       });
 
       // Now call Claude API via proxy server
-      const prompt = `You are an expert frontend developer specializing in creating HTML banners.
+      // Create a more structured prompt based on whether we have design tokens
+      let designInfoSection = '';
 
-I need you to convert this Figma design into a production-ready HTML file for an in-app banner that will be used in NetCoreCloud.
+      if (figmaUrl && nodeData.designData && nodeData.designData.typography) {
+        // Using structured design tokens
+        const tokens = nodeData.designData;
+        designInfoSection = `
+📌 STRUCTURED DESIGN SPECIFICATION:
 
-Design Information:
-- Name: ${nodeData.name}
-${nodeData.width ? `- Width: ${nodeData.width}px` : ''}
-${nodeData.height ? `- Height: ${nodeData.height}px` : ''}
-${nodeData.type ? `- Type: ${nodeData.type}` : ''}
+CANVAS SIZE: ${nodeData.width}px × ${nodeData.height}px
 
-${figmaUrl ? '📌 IMPORTANT: This design data was fetched from Figma REST API and contains comprehensive layout information including:' : 'Extracted Design Data from Figma Plugin API:'}
-${JSON.stringify(nodeData.designData, null, 2)}
+TYPOGRAPHY (${tokens.typography.length} text elements):
+${tokens.typography.map((t: any, i: number) => `${i + 1}. "${t.text}"
+   - Font: ${t.fontFamily} ${t.fontSize}px, weight ${t.fontWeight}
+   - Color: ${t.color}
+   - Align: ${t.textAlign}
+   - Position: x=${t.bounds?.x || 0}, y=${t.bounds?.y || 0}, w=${t.bounds?.width || 0}, h=${t.bounds?.height || 0}`).join('\n')}
 
-Use this ${figmaUrl ? 'comprehensive REST API' : 'extracted'} data to create a PIXEL-PERFECT recreation. Pay special attention to:
-- Exact text content and font properties
-- Precise colors (use the exact hex values provided)
-- Exact spacing, padding, and positioning (use absoluteBoundingBox coordinates)
-- Layer structure, hierarchy, and z-index
-- Auto-layout properties if present
-- Effects like shadows, blur, and gradients
+COLORS:
+${tokens.colors.map((c: any) => `- ${c.element}: ${c.hex} (opacity: ${c.opacity})`).join('\n')}
 
-Requirements:
-1. Create a complete, standalone HTML file with inline CSS
-2. Make it pixel-perfect to match the design
-3. Use semantic HTML5 elements
-4. Ensure it's responsive and works well in email clients (since it will be used in NetCoreCloud)
-5. Use inline styles for maximum compatibility
-6. Include alt text for images
-7. Optimize for web performance
-8. Make all colors, fonts, spacing, and layout match the design exactly
-${additionalInstructions ? `9. Additional requirements: ${additionalInstructions}` : ''}
+LAYOUT STRUCTURE:
+${tokens.structure.map((s: any) => `${'  '.repeat(s.depth)}${s.name} (${s.type})${s.bounds ? ` [${s.bounds.width}×${s.bounds.height} at ${s.bounds.x},${s.bounds.y}]` : ''}`).join('\n')}
 
-Please provide ONLY the HTML code, no explanations. Make sure it's a complete, ready-to-use HTML file.`;
+${tokens.effects.length > 0 ? `EFFECTS:\n${tokens.effects.map((e: any) => `- ${e.element}: ${e.type}`).join('\n')}` : ''}`;
+      } else {
+        // Using raw extraction data
+        designInfoSection = `
+Design Data (Plugin API):
+${JSON.stringify(nodeData.designData, null, 2)}`;
+      }
+
+      const prompt = `You are an expert frontend developer. Create a PIXEL-PERFECT HTML banner.
+
+TARGET: In-app banner for NetCoreCloud
+NAME: ${nodeData.name}
+SIZE: ${nodeData.width}px × ${nodeData.height}px
+
+${designInfoSection}
+
+CRITICAL REQUIREMENTS:
+1. Use EXACT dimensions, positions, colors, and text from above
+2. Create inline CSS for maximum compatibility
+3. Match the screenshot EXACTLY - use it as your visual reference
+4. All text must be selectable HTML text (not images)
+5. Use position: relative/absolute to match exact coordinates
+6. Border-radius, shadows, and effects must match perfectly
+7. Semantic HTML5 elements only
+${additionalInstructions ? `8. Additional: ${additionalInstructions}` : ''}
+
+OUTPUT: Complete, standalone HTML file ONLY. No explanations, no markdown blocks.`;
 
       // Vercel proxy URL for Claude API
       const PROXY_URL = 'https://figma-to-html-ashen.vercel.app/api/proxy';

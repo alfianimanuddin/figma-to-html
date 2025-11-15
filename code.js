@@ -140,7 +140,7 @@ function rgbToHex(rgb) {
 }
 // Listen for messages from the UI
 figma.ui.onmessage = (msg) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e;
     if (msg.type === 'get-credentials') {
         const apiKey = yield figma.clientStorage.getAsync('anthropic_api_key');
         const figmaToken = yield figma.clientStorage.getAsync('figma_token');
@@ -187,16 +187,25 @@ figma.ui.onmessage = (msg) => __awaiter(void 0, void 0, void 0, function* () {
                 }
                 const figmaData = yield figmaResponse.json();
                 base64Image = figmaData.base64Image || '';
-                // Extract node data from REST API response
-                if (figmaData.nodeData && figmaData.nodeId) {
+                // Use structured design tokens instead of raw data
+                if (figmaData.designTokens) {
+                    nodeData = {
+                        name: ((_a = figmaData.designTokens.structure[0]) === null || _a === void 0 ? void 0 : _a.name) || 'Design',
+                        width: figmaData.designTokens.layout.width,
+                        height: figmaData.designTokens.layout.height,
+                        type: ((_b = figmaData.designTokens.structure[0]) === null || _b === void 0 ? void 0 : _b.type) || 'FRAME',
+                        designData: figmaData.designTokens // Structured tokens
+                    };
+                }
+                else if (figmaData.nodeData && figmaData.nodeId) {
                     const node = figmaData.nodeData.nodes[figmaData.nodeId];
                     if (node && node.document) {
                         nodeData = {
                             name: node.document.name,
-                            width: ((_a = node.document.absoluteBoundingBox) === null || _a === void 0 ? void 0 : _a.width) || 0,
-                            height: ((_b = node.document.absoluteBoundingBox) === null || _b === void 0 ? void 0 : _b.height) || 0,
+                            width: ((_c = node.document.absoluteBoundingBox) === null || _c === void 0 ? void 0 : _c.width) || 0,
+                            height: ((_d = node.document.absoluteBoundingBox) === null || _d === void 0 ? void 0 : _d.height) || 0,
                             type: node.document.type,
-                            designData: node.document // Full REST API data
+                            designData: node.document
                         };
                     }
                 }
@@ -244,39 +253,59 @@ figma.ui.onmessage = (msg) => __awaiter(void 0, void 0, void 0, function* () {
                 nodeData: nodeData
             });
             // Now call Claude API via proxy server
-            const prompt = `You are an expert frontend developer specializing in creating HTML banners.
+            // Create a more structured prompt based on whether we have design tokens
+            let designInfoSection = '';
+            if (figmaUrl && nodeData.designData && nodeData.designData.typography) {
+                // Using structured design tokens
+                const tokens = nodeData.designData;
+                designInfoSection = `
+📌 STRUCTURED DESIGN SPECIFICATION:
 
-I need you to convert this Figma design into a production-ready HTML file for an in-app banner that will be used in NetCoreCloud.
+CANVAS SIZE: ${nodeData.width}px × ${nodeData.height}px
 
-Design Information:
-- Name: ${nodeData.name}
-${nodeData.width ? `- Width: ${nodeData.width}px` : ''}
-${nodeData.height ? `- Height: ${nodeData.height}px` : ''}
-${nodeData.type ? `- Type: ${nodeData.type}` : ''}
+TYPOGRAPHY (${tokens.typography.length} text elements):
+${tokens.typography.map((t, i) => {
+                    var _a, _b, _c, _d;
+                    return `${i + 1}. "${t.text}"
+   - Font: ${t.fontFamily} ${t.fontSize}px, weight ${t.fontWeight}
+   - Color: ${t.color}
+   - Align: ${t.textAlign}
+   - Position: x=${((_a = t.bounds) === null || _a === void 0 ? void 0 : _a.x) || 0}, y=${((_b = t.bounds) === null || _b === void 0 ? void 0 : _b.y) || 0}, w=${((_c = t.bounds) === null || _c === void 0 ? void 0 : _c.width) || 0}, h=${((_d = t.bounds) === null || _d === void 0 ? void 0 : _d.height) || 0}`;
+                }).join('\n')}
 
-${figmaUrl ? '📌 IMPORTANT: This design data was fetched from Figma REST API and contains comprehensive layout information including:' : 'Extracted Design Data from Figma Plugin API:'}
-${JSON.stringify(nodeData.designData, null, 2)}
+COLORS:
+${tokens.colors.map((c) => `- ${c.element}: ${c.hex} (opacity: ${c.opacity})`).join('\n')}
 
-Use this ${figmaUrl ? 'comprehensive REST API' : 'extracted'} data to create a PIXEL-PERFECT recreation. Pay special attention to:
-- Exact text content and font properties
-- Precise colors (use the exact hex values provided)
-- Exact spacing, padding, and positioning (use absoluteBoundingBox coordinates)
-- Layer structure, hierarchy, and z-index
-- Auto-layout properties if present
-- Effects like shadows, blur, and gradients
+LAYOUT STRUCTURE:
+${tokens.structure.map((s) => `${'  '.repeat(s.depth)}${s.name} (${s.type})${s.bounds ? ` [${s.bounds.width}×${s.bounds.height} at ${s.bounds.x},${s.bounds.y}]` : ''}`).join('\n')}
 
-Requirements:
-1. Create a complete, standalone HTML file with inline CSS
-2. Make it pixel-perfect to match the design
-3. Use semantic HTML5 elements
-4. Ensure it's responsive and works well in email clients (since it will be used in NetCoreCloud)
-5. Use inline styles for maximum compatibility
-6. Include alt text for images
-7. Optimize for web performance
-8. Make all colors, fonts, spacing, and layout match the design exactly
-${additionalInstructions ? `9. Additional requirements: ${additionalInstructions}` : ''}
+${tokens.effects.length > 0 ? `EFFECTS:\n${tokens.effects.map((e) => `- ${e.element}: ${e.type}`).join('\n')}` : ''}`;
+            }
+            else {
+                // Using raw extraction data
+                designInfoSection = `
+Design Data (Plugin API):
+${JSON.stringify(nodeData.designData, null, 2)}`;
+            }
+            const prompt = `You are an expert frontend developer. Create a PIXEL-PERFECT HTML banner.
 
-Please provide ONLY the HTML code, no explanations. Make sure it's a complete, ready-to-use HTML file.`;
+TARGET: In-app banner for NetCoreCloud
+NAME: ${nodeData.name}
+SIZE: ${nodeData.width}px × ${nodeData.height}px
+
+${designInfoSection}
+
+CRITICAL REQUIREMENTS:
+1. Use EXACT dimensions, positions, colors, and text from above
+2. Create inline CSS for maximum compatibility
+3. Match the screenshot EXACTLY - use it as your visual reference
+4. All text must be selectable HTML text (not images)
+5. Use position: relative/absolute to match exact coordinates
+6. Border-radius, shadows, and effects must match perfectly
+7. Semantic HTML5 elements only
+${additionalInstructions ? `8. Additional: ${additionalInstructions}` : ''}
+
+OUTPUT: Complete, standalone HTML file ONLY. No explanations, no markdown blocks.`;
             // Vercel proxy URL for Claude API
             const PROXY_URL = 'https://figma-to-html-ashen.vercel.app/api/proxy';
             const response = yield fetch(PROXY_URL, {
@@ -292,7 +321,7 @@ Please provide ONLY the HTML code, no explanations. Make sure it's a complete, r
             });
             if (!response.ok) {
                 const errorData = yield response.json();
-                throw new Error(((_c = errorData.error) === null || _c === void 0 ? void 0 : _c.message) || `API request failed with status ${response.status}`);
+                throw new Error(((_e = errorData.error) === null || _e === void 0 ? void 0 : _e.message) || `API request failed with status ${response.status}`);
             }
             const data = yield response.json();
             let htmlContent = data.content[0].text;

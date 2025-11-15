@@ -1,3 +1,97 @@
+// Helper function to extract structured design tokens from Figma node
+function extractDesignTokens(node) {
+  const tokens = {
+    layout: {},
+    colors: [],
+    typography: [],
+    effects: [],
+    images: [],
+    structure: []
+  };
+
+  function traverse(n, depth = 0) {
+    if (!n) return;
+
+    // Extract layout info
+    if (n.absoluteBoundingBox) {
+      if (depth === 0) {
+        tokens.layout = {
+          width: Math.round(n.absoluteBoundingBox.width),
+          height: Math.round(n.absoluteBoundingBox.height),
+          x: Math.round(n.absoluteBoundingBox.x),
+          y: Math.round(n.absoluteBoundingBox.y)
+        };
+      }
+    }
+
+    // Extract structure
+    tokens.structure.push({
+      name: n.name,
+      type: n.type,
+      depth: depth,
+      bounds: n.absoluteBoundingBox ? {
+        x: Math.round(n.absoluteBoundingBox.x),
+        y: Math.round(n.absoluteBoundingBox.y),
+        width: Math.round(n.absoluteBoundingBox.width),
+        height: Math.round(n.absoluteBoundingBox.height)
+      } : null
+    });
+
+    // Extract colors from fills
+    if (n.fills && Array.isArray(n.fills)) {
+      n.fills.forEach(fill => {
+        if (fill.type === 'SOLID' && fill.color) {
+          const r = Math.round(fill.color.r * 255);
+          const g = Math.round(fill.color.g * 255);
+          const b = Math.round(fill.color.b * 255);
+          const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+          tokens.colors.push({
+            element: n.name,
+            hex: hex,
+            opacity: fill.opacity || 1
+          });
+        }
+      });
+    }
+
+    // Extract typography
+    if (n.type === 'TEXT') {
+      tokens.typography.push({
+        text: n.characters,
+        fontFamily: n.style?.fontFamily || 'Arial',
+        fontSize: n.style?.fontSize || 14,
+        fontWeight: n.style?.fontWeight || 400,
+        textAlign: n.style?.textAlignHorizontal || 'LEFT',
+        color: n.fills && n.fills[0] && n.fills[0].color ?
+          `#${Math.round(n.fills[0].color.r * 255).toString(16).padStart(2, '0')}${Math.round(n.fills[0].color.g * 255).toString(16).padStart(2, '0')}${Math.round(n.fills[0].color.b * 255).toString(16).padStart(2, '0')}`
+          : '#000000',
+        bounds: n.absoluteBoundingBox
+      });
+    }
+
+    // Extract effects (shadows, etc)
+    if (n.effects && Array.isArray(n.effects) && n.effects.length > 0) {
+      n.effects.forEach(effect => {
+        if (effect.visible !== false) {
+          tokens.effects.push({
+            type: effect.type,
+            element: n.name,
+            ...effect
+          });
+        }
+      });
+    }
+
+    // Recursively traverse children
+    if (n.children && Array.isArray(n.children)) {
+      n.children.forEach(child => traverse(child, depth + 1));
+    }
+  }
+
+  traverse(node);
+  return tokens;
+}
+
 // Figma REST API proxy endpoint
 export default async function handler(req, res) {
   // Enable CORS
@@ -102,13 +196,23 @@ export default async function handler(req, res) {
       }
     }
 
+    // Extract structured design tokens from node data
+    let designTokens = null;
+    if (nodeData && nodeData.nodes && nodeId) {
+      const node = nodeData.nodes[nodeId];
+      if (node && node.document) {
+        designTokens = extractDesignTokens(node.document);
+      }
+    }
+
     return res.status(200).json({
       fileData,
       nodeData,
       imageUrl,
       base64Image,
       fileKey,
-      nodeId
+      nodeId,
+      designTokens
     });
 
   } catch (error) {
