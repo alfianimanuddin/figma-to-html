@@ -10,6 +10,94 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 // This plugin code runs in Figma's sandbox
 figma.showUI(__html__, { width: 400, height: 600 });
+// Helper function to extract design data from Figma nodes
+function extractDesignData(node) {
+    const data = {
+        type: node.type,
+        name: node.name,
+        visible: node.visible
+    };
+    // Add dimensions if available
+    if ('width' in node && 'height' in node) {
+        data.width = node.width;
+        data.height = node.height;
+    }
+    // Add position if available
+    if ('x' in node && 'y' in node) {
+        data.x = node.x;
+        data.y = node.y;
+    }
+    // Extract fills (colors, gradients, images)
+    if ('fills' in node && node.fills !== figma.mixed) {
+        data.fills = node.fills.map(fill => {
+            if (fill.type === 'SOLID') {
+                return {
+                    type: 'SOLID',
+                    color: rgbToHex(fill.color),
+                    opacity: fill.opacity || 1
+                };
+            }
+            return { type: fill.type };
+        });
+    }
+    // Extract text properties
+    if (node.type === 'TEXT') {
+        const textNode = node;
+        data.text = {
+            characters: textNode.characters,
+            fontSize: textNode.fontSize,
+            fontName: textNode.fontName,
+            fontWeight: textNode.fontWeight,
+            textAlignHorizontal: textNode.textAlignHorizontal,
+            textAlignVertical: textNode.textAlignVertical,
+            letterSpacing: textNode.letterSpacing,
+            lineHeight: textNode.lineHeight
+        };
+    }
+    // Extract effects (shadows, blur)
+    if ('effects' in node && node.effects.length > 0) {
+        data.effects = node.effects.map(effect => ({
+            type: effect.type,
+            visible: effect.visible,
+            radius: 'radius' in effect ? effect.radius : undefined,
+            color: 'color' in effect ? rgbToHex(effect.color) : undefined,
+            offset: 'offset' in effect ? effect.offset : undefined
+        }));
+    }
+    // Extract corner radius
+    if ('cornerRadius' in node) {
+        data.cornerRadius = node.cornerRadius;
+    }
+    // Extract strokes
+    if ('strokes' in node && node.strokes.length > 0) {
+        data.strokes = node.strokes.map(stroke => {
+            if (stroke.type === 'SOLID') {
+                return {
+                    type: 'SOLID',
+                    color: rgbToHex(stroke.color),
+                    opacity: stroke.opacity || 1
+                };
+            }
+            return { type: stroke.type };
+        });
+    }
+    if ('strokeWeight' in node) {
+        data.strokeWeight = node.strokeWeight;
+    }
+    // Recursively extract children
+    if ('children' in node) {
+        data.children = node.children.map(child => extractDesignData(child));
+    }
+    return data;
+}
+// Helper to convert RGB to Hex
+function rgbToHex(rgb) {
+    const toHex = (value) => {
+        const hex = Math.round(value * 255).toString(16);
+        return hex.length === 1 ? '0' + hex : hex;
+    };
+    return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`;
+}
 // Listen for messages from the UI
 figma.ui.onmessage = (msg) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
@@ -42,12 +130,15 @@ figma.ui.onmessage = (msg) => __awaiter(void 0, void 0, void 0, function* () {
                 format: 'PNG',
                 constraint: { type: 'SCALE', value: 2 }
             });
+            // Extract detailed design data from Figma
+            const designData = extractDesignData(node);
             // Get node properties
             const nodeData = {
                 name: node.name,
                 width: node.width,
                 height: node.height,
-                type: node.type
+                type: node.type,
+                designData: designData
             };
             // Convert image bytes to base64
             const base64Image = figma.base64Encode(imageBytes);
@@ -69,6 +160,15 @@ Design Information:
 - Width: ${nodeData.width}px
 - Height: ${nodeData.height}px
 - Type: ${nodeData.type}
+
+Extracted Design Data from Figma:
+${JSON.stringify(nodeData.designData, null, 2)}
+
+Use this extracted data to create a PIXEL-PERFECT recreation. Pay special attention to:
+- Exact text content and font properties
+- Precise colors (use the exact hex values provided)
+- Exact spacing and positioning
+- Layer structure and z-index
 
 Requirements:
 1. Create a complete, standalone HTML file with inline CSS
