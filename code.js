@@ -45,13 +45,13 @@ function extractDesignData(node) {
         const textNode = node;
         data.text = {
             characters: textNode.characters,
-            fontSize: textNode.fontSize,
-            fontName: textNode.fontName,
+            fontSize: typeof textNode.fontSize === 'number' ? textNode.fontSize : 14,
+            fontName: typeof textNode.fontName === 'object' ? `${textNode.fontName.family} ${textNode.fontName.style}` : 'Arial',
             fontWeight: textNode.fontWeight,
             textAlignHorizontal: textNode.textAlignHorizontal,
             textAlignVertical: textNode.textAlignVertical,
-            letterSpacing: textNode.letterSpacing,
-            lineHeight: textNode.lineHeight
+            letterSpacing: typeof textNode.letterSpacing === 'object' ? textNode.letterSpacing.value : 0,
+            lineHeight: typeof textNode.lineHeight === 'object' && 'value' in textNode.lineHeight ? textNode.lineHeight.value : 'AUTO'
         };
     }
     // Extract effects (shadows, blur)
