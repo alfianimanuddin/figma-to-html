@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Figma to HTML Plugin - Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 50px;
+        }
+        
+        .header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .header p {
+            font-size: 1.3em;
+            opacity: 0.9;
+        }
+        
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .plugin-window {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+            transition: transform 0.3s;
+        }
+        
+        .plugin-window:hover {
+            transform: translateY(-5px);
+        }
+        
+        .window-header {
+            background: #f5f5f5;
+            padding: 12px 16px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .window-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .dot-close { background: #ff5f57; }
+        .dot-minimize { background: #ffbd2e; }
+        .dot-maximize { background: #28ca42; }
+        
+        .window-title {
+            margin-left: 10px;
+            font-size: 12px;
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .plugin-content {
+            padding: 20px;
+        }
+        
+        .screen-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #000;
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+            border-radius: 6px;
+            padding: 12px;
+            font-size: 11px;
+            margin-bottom: 15px;
+            color: #1565c0;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            display: block;
+            letter-spacing: 0.5px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: inherit;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: #18a0fb;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #0d8be0;
+        }
+        
+        .preview-image {
+            width: 100%;
+            height: 120px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border-radius: 6px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 15px;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            font-size: 11px;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+        }
+        
+        .tab.active {
+            color: #18a0fb;
+            border-bottom-color: #18a0fb;
+        }
+        
+        .code-preview {
+            background: #1e1e1e;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            color: #d4d4d4;
+            overflow-x: auto;
+            margin-bottom: 15px;
+        }
+        
+        .code-line {
+            margin: 2px 0;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 40px;
+        }
+        
+        .feature-card {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        
+        .feature-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+        
+        .feature-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .feature-desc {
+            color: #666;
+            line-height: 1.6;
+        }
+        
+        .cta {
+            text-align: center;
+            margin-top: 50px;
+            color: white;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            padding: 18px 40px;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 1.1em;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            transition: all 0.3s;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎨 Figma to HTML with Claude AI</h1>
+            <p>Convert your designs to production-ready code in seconds</p>
+        </div>
+        
+        <div class="demo-grid">
+            <!-- Setup Screen -->
+            <div class="plugin-window">
+                <div class="window-header">
+                    <div class="window-dot dot-close"></div>
+                    <div class="window-dot dot-minimize"></div>
+                    <div class="window-dot dot-maximize"></div>
+                    <div class="window-title">Banner to HTML with Claude AI</div>
+                </div>
+                <div class="plugin-content">
+                    <div class="screen-title">🤖 Claude AI Configuration</div>
+                    
+                    <div class="info-box">
+                        <strong>Need an API key?</strong><br>
+                        Get yours from console.anthropic.com
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Anthropic API Key</label>
+                        <input type="password" class="form-input" placeholder="sk-ant-api03-..." value="••••••••••••••••">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Additional Instructions (Optional)</label>
+                        <input type="text" class="form-input" placeholder="Make it responsive...">
+                    </div>
+                    
+                    <button class="btn btn-primary">Generate HTML</button>
+                </div>
+            </div>
+            
+            <!-- Preview Screen -->
+            <div class="plugin-window">
+                <div class="window-header">
+                    <div class="window-dot dot-close"></div>
+                    <div class="window-dot dot-minimize"></div>
+                    <div class="window-dot dot-maximize"></div>
+                    <div class="window-title">Banner to HTML with Claude AI</div>
+                </div>
+                <div class="plugin-content">
+                    <div class="screen-title">📸 Design Preview</div>
+                    
+                    <div class="preview-image">
+                        Your Banner Design
+                    </div>
+                    
+                    <div class="tabs">
+                        <div class="tab active">Preview</div>
+                        <div class="tab">HTML Code</div>
+                    </div>
+                    
+                    <div class="code-preview">
+                        <div class="code-line">&lt;!DOCTYPE html&gt;</div>
+                        <div class="code-line">&lt;html&gt;</div>
+                        <div class="code-line">  &lt;head&gt;</div>
+                        <div class="code-line">    &lt;style&gt;...&lt;/style&gt;</div>
+                        <div class="code-line">  &lt;/head&gt;</div>
+                        <div class="code-line">  &lt;body&gt;...&lt;/body&gt;</div>
+                        <div class="code-line">&lt;/html&gt;</div>
+                    </div>
+                    
+                    <button class="btn btn-primary" style="background: #28a745; margin-bottom: 10px;">Copy HTML Code</button>
+                    <button class="btn" style="background: #f0f0f0; color: #333;">Generate New</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="features">
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <div class="feature-title">Lightning Fast</div>
+                <div class="feature-desc">Convert designs to HTML in under 10 seconds with Claude AI</div>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">🎯</div>
+                <div class="feature-title">Pixel Perfect</div>
+                <div class="feature-desc">AI analyzes your design and generates accurate HTML & CSS</div>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">📱</div>
+                <div class="feature-title">Responsive Ready</div>
+                <div class="feature-desc">Optimized for NetCoreCloud and email clients</div>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">🔒</div>
+                <div class="feature-title">Secure & Private</div>
+                <div class="feature-card">
+                <div class="feature-desc">Your API key stays local, never shared</div>
+            </div>
+        </div>
+        
+        <div class="cta">
+            <h2 style="margin-bottom: 20px; font-size: 2em;">Ready to Get Started?</h2>
+            <p style="margin-bottom: 30px; font-size: 1.1em; opacity: 0.9;">Follow the Quick Start guide and start converting designs in minutes!</p>
+            <a href="#" class="cta-button">Download Plugin →</a>
+        </div>
+    </div>
+</body>
+</html>

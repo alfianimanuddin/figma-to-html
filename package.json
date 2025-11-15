@@ -1,0 +1,13 @@
+{
+  "name": "figma-banner-to-html-claude",
+  "version": "1.0.0",
+  "description": "Figma plugin to convert banner designs to HTML using Claude AI",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.90.0",
+    "typescript": "^5.3.3"
+  }
+}

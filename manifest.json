@@ -1,0 +1,11 @@
+{
+  "name": "Banner to HTML with Claude AI",
+  "id": "banner-to-html-claude",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["https://*.vercel.app"]
+  }
+}
