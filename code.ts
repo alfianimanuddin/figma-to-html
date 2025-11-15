@@ -1,6 +1,41 @@
 // This plugin code runs in Figma's sandbox
 figma.showUI(__html__, { width: 400, height: 600 });
 
+// Helper to safely serialize any value, removing Symbols
+function safeSerialize(value: any): any {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  // Handle primitive types
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
+
+  // Handle arrays
+  if (Array.isArray(value)) {
+    return value.map(item => safeSerialize(item));
+  }
+
+  // Handle objects - convert to plain object
+  if (typeof value === 'object') {
+    const result: any = {};
+    for (const key in value) {
+      if (value.hasOwnProperty(key)) {
+        const propValue = value[key];
+        // Skip functions and symbols
+        if (typeof propValue !== 'function' && typeof propValue !== 'symbol') {
+          result[key] = safeSerialize(propValue);
+        }
+      }
+    }
+    return result;
+  }
+
+  // For anything else, try to convert to string
+  return String(value);
+}
+
 // Helper function to extract design data from Figma nodes
 function extractDesignData(node: SceneNode): any {
   const data: any = {
@@ -42,23 +77,33 @@ function extractDesignData(node: SceneNode): any {
       characters: textNode.characters,
       fontSize: typeof textNode.fontSize === 'number' ? textNode.fontSize : 14,
       fontName: typeof textNode.fontName === 'object' ? `${textNode.fontName.family} ${textNode.fontName.style}` : 'Arial',
-      fontWeight: textNode.fontWeight,
-      textAlignHorizontal: textNode.textAlignHorizontal,
-      textAlignVertical: textNode.textAlignVertical,
+      fontWeight: typeof textNode.fontWeight === 'number' ? textNode.fontWeight : 400,
+      textAlignHorizontal: String(textNode.textAlignHorizontal),
+      textAlignVertical: String(textNode.textAlignVertical),
       letterSpacing: typeof textNode.letterSpacing === 'object' ? textNode.letterSpacing.value : 0,
-      lineHeight: typeof textNode.lineHeight === 'object' && 'value' in textNode.lineHeight ? textNode.lineHeight.value : 'AUTO'
+      lineHeight: typeof textNode.lineHeight === 'object' && 'value' in textNode.lineHeight ? textNode.lineHeight.value : 1.2
     };
   }
 
   // Extract effects (shadows, blur)
   if ('effects' in node && node.effects.length > 0) {
-    data.effects = node.effects.map(effect => ({
-      type: effect.type,
-      visible: effect.visible,
-      radius: 'radius' in effect ? effect.radius : undefined,
-      color: 'color' in effect ? rgbToHex(effect.color) : undefined,
-      offset: 'offset' in effect ? effect.offset : undefined
-    }));
+    data.effects = node.effects.map(effect => {
+      const effectData: any = {
+        type: effect.type,
+        visible: effect.visible
+      };
+
+      if ('radius' in effect) effectData.radius = effect.radius;
+      if ('color' in effect) effectData.color = rgbToHex(effect.color);
+      if ('offset' in effect && effect.offset) {
+        effectData.offset = {
+          x: effect.offset.x,
+          y: effect.offset.y
+        };
+      }
+
+      return effectData;
+    });
   }
 
   // Extract corner radius
@@ -89,7 +134,7 @@ function extractDesignData(node: SceneNode): any {
     data.children = node.children.map(child => extractDesignData(child));
   }
 
-  return data;
+  return safeSerialize(data);
 }
 
 // Helper to convert RGB to Hex
@@ -103,55 +148,117 @@ function rgbToHex(rgb: RGB): string {
 
 // Listen for messages from the UI
 figma.ui.onmessage = async (msg) => {
-  if (msg.type === 'get-api-key') {
+  if (msg.type === 'get-credentials') {
     const apiKey = await figma.clientStorage.getAsync('anthropic_api_key');
+    const figmaToken = await figma.clientStorage.getAsync('figma_token');
     figma.ui.postMessage({
-      type: 'saved-api-key',
-      apiKey: apiKey || ''
+      type: 'saved-credentials',
+      apiKey: apiKey || '',
+      figmaToken: figmaToken || ''
     });
     return;
   }
 
-  if (msg.type === 'save-api-key') {
+  if (msg.type === 'save-credentials') {
     await figma.clientStorage.setAsync('anthropic_api_key', msg.apiKey);
+    if (msg.figmaToken) {
+      await figma.clientStorage.setAsync('figma_token', msg.figmaToken);
+    }
     return;
   }
 
   if (msg.type === 'generate-html') {
     try {
-      // Get the currently selected node
-      const selection = figma.currentPage.selection;
+      const apiKey = msg.apiKey;
+      const figmaToken = msg.figmaToken;
+      const figmaUrl = msg.figmaUrl;
+      const additionalInstructions = msg.additionalInstructions || '';
 
-      if (selection.length === 0) {
-        figma.ui.postMessage({
-          type: 'error',
-          message: 'Please select a frame or component to convert'
+      let base64Image = '';
+      let nodeData: any = {};
+      let designData: any = {};
+
+      // Check if using Figma URL workflow
+      if (figmaUrl && figmaToken) {
+        // Use Figma REST API workflow
+        const FIGMA_PROXY_URL = 'https://figma-to-html-ashen.vercel.app/api/figma';
+
+        const figmaResponse = await fetch(FIGMA_PROXY_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            figmaToken: figmaToken,
+            figmaUrl: figmaUrl
+          })
         });
-        return;
+
+        if (!figmaResponse.ok) {
+          const errorData = await figmaResponse.json();
+          throw new Error(errorData.error || 'Failed to fetch Figma data');
+        }
+
+        const figmaData = await figmaResponse.json();
+        base64Image = figmaData.base64Image || '';
+
+        // Extract node data from REST API response
+        if (figmaData.nodeData && figmaData.nodeId) {
+          const node = figmaData.nodeData.nodes[figmaData.nodeId];
+          if (node && node.document) {
+            nodeData = {
+              name: node.document.name,
+              width: node.document.absoluteBoundingBox?.width || 0,
+              height: node.document.absoluteBoundingBox?.height || 0,
+              type: node.document.type,
+              designData: node.document // Full REST API data
+            };
+          }
+        }
+
+        // If no node data, use file data
+        if (!nodeData.name && figmaData.fileData) {
+          nodeData = {
+            name: figmaData.fileData.name,
+            designData: figmaData.fileData
+          };
+        }
+
+      } else {
+        // Use plugin API workflow (selected node)
+        const selection = figma.currentPage.selection;
+
+        if (selection.length === 0) {
+          figma.ui.postMessage({
+            type: 'error',
+            message: 'Please select a frame or component to convert'
+          });
+          return;
+        }
+
+        const node = selection[0];
+
+        // Export the selected node as PNG
+        const imageBytes = await node.exportAsync({
+          format: 'PNG',
+          constraint: { type: 'SCALE', value: 2 }
+        });
+
+        // Extract detailed design data from Figma
+        designData = extractDesignData(node);
+
+        // Get node properties
+        nodeData = {
+          name: node.name,
+          width: node.width,
+          height: node.height,
+          type: node.type,
+          designData: designData
+        };
+
+        // Convert image bytes to base64
+        base64Image = figma.base64Encode(imageBytes);
       }
-
-      const node = selection[0];
-
-      // Export the selected node as PNG
-      const imageBytes = await node.exportAsync({
-        format: 'PNG',
-        constraint: { type: 'SCALE', value: 2 }
-      });
-
-      // Extract detailed design data from Figma
-      const designData = extractDesignData(node);
-
-      // Get node properties
-      const nodeData = {
-        name: node.name,
-        width: node.width,
-        height: node.height,
-        type: node.type,
-        designData: designData
-      };
-
-      // Convert image bytes to base64
-      const base64Image = figma.base64Encode(imageBytes);
 
       // Send data to UI for preview
       figma.ui.postMessage({
@@ -161,27 +268,26 @@ figma.ui.onmessage = async (msg) => {
       });
 
       // Now call Claude API via proxy server
-      const apiKey = msg.apiKey;
-      const additionalInstructions = msg.additionalInstructions || '';
-
       const prompt = `You are an expert frontend developer specializing in creating HTML banners.
 
 I need you to convert this Figma design into a production-ready HTML file for an in-app banner that will be used in NetCoreCloud.
 
 Design Information:
 - Name: ${nodeData.name}
-- Width: ${nodeData.width}px
-- Height: ${nodeData.height}px
-- Type: ${nodeData.type}
+${nodeData.width ? `- Width: ${nodeData.width}px` : ''}
+${nodeData.height ? `- Height: ${nodeData.height}px` : ''}
+${nodeData.type ? `- Type: ${nodeData.type}` : ''}
 
-Extracted Design Data from Figma:
+${figmaUrl ? '📌 IMPORTANT: This design data was fetched from Figma REST API and contains comprehensive layout information including:' : 'Extracted Design Data from Figma Plugin API:'}
 ${JSON.stringify(nodeData.designData, null, 2)}
 
-Use this extracted data to create a PIXEL-PERFECT recreation. Pay special attention to:
+Use this ${figmaUrl ? 'comprehensive REST API' : 'extracted'} data to create a PIXEL-PERFECT recreation. Pay special attention to:
 - Exact text content and font properties
 - Precise colors (use the exact hex values provided)
-- Exact spacing and positioning
-- Layer structure and z-index
+- Exact spacing, padding, and positioning (use absoluteBoundingBox coordinates)
+- Layer structure, hierarchy, and z-index
+- Auto-layout properties if present
+- Effects like shadows, blur, and gradients
 
 Requirements:
 1. Create a complete, standalone HTML file with inline CSS

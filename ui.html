@@ -256,11 +256,36 @@
         />
       </div>
 
+      <div class="info-box" style="background: #f0fff4; border-color: #b3e6cc; color: #006633;">
+        <strong>💡 Pro Tip:</strong> For better results, provide a Figma file URL. This allows access to complete design data via Figma's REST API.
+      </div>
+
+      <div class="input-group">
+        <label>Figma Personal Access Token (for URL access)</label>
+        <input
+          type="password"
+          id="figmaToken"
+          placeholder="figd_..."
+          autocomplete="off"
+        />
+        <small style="font-size: 10px; color: #666;">Get it from Figma Settings → Account → Personal Access Tokens. <a href="https://help.figma.com/hc/en-us/articles/8085703771159-Manage-personal-access-tokens" target="_blank">Learn more</a></small>
+      </div>
+
+      <div class="input-group">
+        <label>Figma URL (Optional - for better results)</label>
+        <input
+          type="text"
+          id="figmaUrl"
+          placeholder="https://www.figma.com/file/..."
+        />
+        <small style="font-size: 10px; color: #666;">Leave empty to use currently selected node in Figma</small>
+      </div>
+
       <div class="input-group">
         <label>Additional Instructions (Optional)</label>
-        <input 
-          type="text" 
-          id="instructions" 
+        <input
+          type="text"
+          id="instructions"
           placeholder="e.g., Make it responsive, use Tailwind CSS..."
         />
       </div>
@@ -296,6 +321,8 @@
 
   <script>
     const apiKeyInput = document.getElementById('apiKey');
+    const figmaTokenInput = document.getElementById('figmaToken');
+    const figmaUrlInput = document.getElementById('figmaUrl');
     const instructionsInput = document.getElementById('instructions');
     const generateBtn = document.getElementById('generateBtn');
     const copyBtn = document.getElementById('copyBtn');
@@ -309,8 +336,8 @@
 
     let generatedHTML = '';
 
-    // Request saved API key from plugin
-    parent.postMessage({ pluginMessage: { type: 'get-api-key' } }, '*');
+    // Request saved credentials from plugin
+    parent.postMessage({ pluginMessage: { type: 'get-credentials' } }, '*');
 
     // Tab switching
     document.querySelectorAll('.tab').forEach(tab => {
@@ -329,16 +356,30 @@
     generateBtn.addEventListener('click', async () => {
       console.log('Generate button clicked!');
       const apiKey = apiKeyInput.value.trim();
+      const figmaToken = figmaTokenInput.value.trim();
+      const figmaUrl = figmaUrlInput.value.trim();
 
       if (!apiKey) {
         showStatus('Please enter your Anthropic API key', 'error');
         return;
       }
 
-      // Save API key to Figma's clientStorage
-      parent.postMessage({ pluginMessage: { type: 'save-api-key', apiKey } }, '*');
+      // If using Figma URL, require token
+      if (figmaUrl && !figmaToken) {
+        showStatus('Please enter your Figma Personal Access Token to use URL', 'error');
+        return;
+      }
 
-      showStatus('Capturing design...', 'loading');
+      // Save credentials to Figma's clientStorage
+      parent.postMessage({
+        pluginMessage: {
+          type: 'save-credentials',
+          apiKey,
+          figmaToken
+        }
+      }, '*');
+
+      showStatus(figmaUrl ? 'Fetching design from Figma API...' : 'Capturing design...', 'loading');
       generateBtn.disabled = true;
 
       // Request Figma to capture the selected node and generate HTML
@@ -347,6 +388,8 @@
         pluginMessage: {
           type: 'generate-html',
           apiKey: apiKey,
+          figmaToken: figmaToken,
+          figmaUrl: figmaUrl,
           additionalInstructions: instructionsInput.value.trim()
         }
       }, '*');
@@ -357,9 +400,12 @@
       const msg = event.data.pluginMessage;
       console.log('Received message from Figma:', msg);
 
-      if (msg.type === 'saved-api-key') {
+      if (msg.type === 'saved-credentials') {
         if (msg.apiKey) {
           apiKeyInput.value = msg.apiKey;
+        }
+        if (msg.figmaToken) {
+          figmaTokenInput.value = msg.figmaToken;
         }
         return;
       }
